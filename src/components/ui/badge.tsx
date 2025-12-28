@@ -18,6 +18,7 @@ const badgeVariants = cva(
                 compute: "tag-compute",
                 evaluation: "tag-evaluation",
                 methodology: "tag-methodology",
+                theory: "tag-theory",
             },
         },
         defaultVariants: {

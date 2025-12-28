@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Link } from "react-router-dom"
 import {
@@ -9,7 +10,8 @@ import {
     Activity,
     Target,
     Layers,
-    Sparkles
+    Sparkles,
+    Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,54 +19,85 @@ import { Badge } from "@/components/ui/badge"
 import { AnimatedCounter, CircularProgress, PercentageCounter } from "@/components/ui/animated-counter"
 import { KnowledgeGraph, generateMockNodes } from "@/components/ui/knowledge-graph"
 import { CompactTimeline } from "@/components/ui/research-timeline"
-
-const stats = [
-    {
-        label: "Papers Analyzed",
-        value: 47,
-        icon: FileSearch,
-        trend: "+12 this week",
-        color: "hsl(var(--brand-primary))"
-    },
-    {
-        label: "Gaps Discovered",
-        value: 156,
-        icon: Lightbulb,
-        trend: "+28 this week",
-        color: "hsl(var(--gap-data))"
-    },
-    {
-        label: "Research Themes",
-        value: 12,
-        icon: Layers,
-        trend: "+3 this week",
-        color: "hsl(var(--brand-secondary))"
-    },
-    {
-        label: "Collections",
-        value: 8,
-        icon: Target,
-        trend: "+2 this week",
-        color: "hsl(var(--gap-evaluation))"
-    }
-]
-
-const typeBreakdown = [
-    { label: "Data Scarcity", value: 35, color: "hsl(var(--gap-data))" },
-    { label: "Compute Limits", value: 28, color: "hsl(var(--gap-compute))" },
-    { label: "Evaluation Gaps", value: 22, color: "hsl(var(--gap-evaluation))" },
-    { label: "Methodology", value: 15, color: "hsl(var(--gap-methodology))" }
-]
-
-const recentActivity = [
-    { action: "Crawled", target: "Scaling Laws for Neural Language Models", time: "2 hours ago" },
-    { action: "Added to", target: "NLP Research collection", time: "3 hours ago" },
-    { action: "Exported", target: "15 gaps as CSV", time: "5 hours ago" },
-    { action: "Crawled", target: "Attention Is All You Need", time: "1 day ago" }
-]
+import { useAuth } from "@/context/AuthContext"
+import { getUserStats, getCrawlResults, type UserStats } from "@/lib/firestore"
 
 export function DashboardPage() {
+    const { user } = useAuth()
+    const [stats, setStats] = useState<UserStats | null>(null)
+    const [recentResults, setRecentResults] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const graphNodes = generateMockNodes()
+
+    useEffect(() => {
+        if (!user) return
+
+        async function loadData() {
+            try {
+                const [statsData, resultsData] = await Promise.all([
+                    getUserStats(user!.id),
+                    getCrawlResults(user!.id)
+                ])
+                setStats(statsData)
+                setRecentResults(resultsData.slice(0, 5))
+            } catch (error) {
+                console.error("Failed to load dashboard data:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        loadData()
+    }, [user])
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--brand-primary))]" />
+            </div>
+        )
+    }
+
+    const statCards = [
+        {
+            label: "Papers Analyzed",
+            value: stats?.totalPapers || 0,
+            icon: FileSearch,
+            trend: "+0 this week",
+            color: "hsl(var(--brand-primary))"
+        },
+        {
+            label: "Gaps Discovered",
+            value: stats?.totalGaps || 0,
+            icon: Lightbulb,
+            trend: "+0 this week",
+            color: "hsl(var(--gap-data))"
+        },
+        {
+            label: "Research Themes",
+            value: 4, // Placeholder for calculated themes
+            icon: Layers,
+            trend: "Stable",
+            color: "hsl(var(--brand-secondary))"
+        },
+        {
+            label: "Collections",
+            value: stats?.totalCollections || 0,
+            icon: Target,
+            trend: "+0 this week",
+            color: "hsl(var(--gap-evaluation))"
+        }
+    ]
+
+    const typeData = [
+        { label: "Data Scarcity", value: stats?.typeCounts.data || 0, color: "hsl(var(--gap-data))" },
+        { label: "Compute Limits", value: stats?.typeCounts.compute || 0, color: "hsl(var(--gap-compute))" },
+        { label: "Evaluation Gaps", value: stats?.typeCounts.evaluation || 0, color: "hsl(var(--gap-evaluation))" },
+        { label: "Methodology", value: stats?.typeCounts.methodology || 0, color: "hsl(var(--gap-methodology))" }
+    ]
+
+    // Calculate quality percentage based on gap discovery
+    const qualityScore = stats?.totalGaps ? Math.min(100, Math.round((stats.totalGaps / 50) * 100)) : 0
 
     return (
         <div className="min-h-screen py-12">
@@ -93,7 +126,7 @@ export function DashboardPage() {
 
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    {stats.map((stat, idx) => {
+                    {statCards.map((stat, idx) => {
                         const Icon = stat.icon
                         return (
                             <motion.div
@@ -158,10 +191,10 @@ export function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="flex justify-center mb-6">
-                                <CircularProgress value={72} label="Quality" />
+                                <CircularProgress value={qualityScore} label="Insight" />
                             </div>
                             <div className="space-y-4">
-                                {typeBreakdown.map((type) => (
+                                {typeData.map((type) => (
                                     <PercentageCounter
                                         key={type.label}
                                         value={type.value}
@@ -180,33 +213,41 @@ export function DashboardPage() {
                         <CardHeader className="pb-3">
                             <CardTitle className="flex items-center gap-2">
                                 <Activity className="h-5 w-5" />
-                                Recent Activity
+                                Recent Crawls
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
-                                {recentActivity.map((activity, idx) => (
-                                    <motion.div
-                                        key={idx}
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: idx * 0.1 }}
-                                        className="flex items-center gap-3"
-                                    >
-                                        <div className="h-2 w-2 rounded-full bg-[hsl(var(--brand-primary))]" />
-                                        <div className="flex-1">
-                                            <p className="text-sm">
-                                                <span className="font-medium">{activity.action}</span>{" "}
-                                                <span className="text-[hsl(var(--muted-foreground))]">
-                                                    {activity.target}
-                                                </span>
-                                            </p>
-                                        </div>
-                                        <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                                            {activity.time}
-                                        </span>
-                                    </motion.div>
-                                ))}
+                                {recentResults.length > 0 ? (
+                                    recentResults.map((result, idx) => (
+                                        <motion.div
+                                            key={result.id}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: idx * 0.1 }}
+                                            className="flex items-center gap-3"
+                                        >
+                                            <div className="h-2 w-2 rounded-full bg-[hsl(var(--brand-primary))]" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm truncate">
+                                                    <span className="font-medium">Crawled</span>{" "}
+                                                    <span className="text-[hsl(var(--muted-foreground))]">
+                                                        {result.title}
+                                                    </span>
+                                                </p>
+                                            </div>
+                                            <span className="text-xs text-[hsl(var(--muted-foreground))] whitespace-nowrap">
+                                                {result.createdAt?.toDate ?
+                                                    new Date(result.createdAt.toDate()).toLocaleDateString() :
+                                                    "Recently"}
+                                            </span>
+                                        </motion.div>
+                                    ))
+                                ) : (
+                                    <p className="text-sm text-center py-8 text-[hsl(var(--muted-foreground))]">
+                                        No recent activity. Start by crawling a paper!
+                                    </p>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -219,7 +260,7 @@ export function DashboardPage() {
                                     <Lightbulb className="h-5 w-5" />
                                     Recent Discoveries
                                 </CardTitle>
-                                <Link to="/insights">
+                                <Link to="/explore">
                                     <Button variant="ghost" size="sm" className="gap-1 text-xs">
                                         View All
                                         <ArrowRight className="h-3 w-3" />

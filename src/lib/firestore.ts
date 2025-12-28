@@ -19,8 +19,15 @@ import { db } from "./firebase"
 export interface Gap {
     id: string
     problem: string
-    type: "data" | "compute" | "evaluation" | "methodology"
+    type: "data" | "compute" | "evaluation" | "theory" | "deployment" | "methodology"
     confidence: number
+    impactScore?: "low" | "medium" | "high"
+    difficulty?: "low" | "medium" | "high"
+    // Meta Research Fields
+    assumptions?: string[]
+    failures?: string[]
+    datasetGaps?: string[]
+    evaluationCritique?: string
 }
 
 export interface CrawlResult {
@@ -29,6 +36,7 @@ export interface CrawlResult {
     url: string
     title: string
     venue?: string
+    year?: string
     content: string
     gaps: Gap[]
     createdAt: Timestamp
@@ -124,11 +132,7 @@ export async function toggleCollectionStar(id: string, starred: boolean): Promis
 }
 
 // Statistics
-export async function getUserStats(userId: string): Promise<{
-    totalPapers: number
-    totalGaps: number
-    totalCollections: number
-}> {
+export async function getUserStats(userId: string): Promise<UserStats> {
     const [crawlResults, collections] = await Promise.all([
         getCrawlResults(userId),
         getCollections(userId),
@@ -136,9 +140,33 @@ export async function getUserStats(userId: string): Promise<{
 
     const totalGaps = crawlResults.reduce((acc, r) => acc + r.gaps.length, 0)
 
+    // Calculate type counts
+    const typeCounts = crawlResults.flatMap(r => r.gaps).reduce((acc: any, gap) => {
+        acc[gap.type] = (acc[gap.type] || 0) + 1
+        return acc
+    }, {
+        data: 0,
+        compute: 0,
+        evaluation: 0,
+        methodology: 0
+    })
+
     return {
         totalPapers: crawlResults.length,
         totalGaps,
         totalCollections: collections.length,
+        typeCounts
+    }
+}
+
+export interface UserStats {
+    totalPapers: number
+    totalGaps: number
+    totalCollections: number
+    typeCounts: {
+        data: number
+        compute: number
+        evaluation: number
+        methodology: number
     }
 }

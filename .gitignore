@@ -22,3 +22,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.env
+
+# Firebase
+.firebase/
+firebase-debug.log*
+
+# Testing
+coverage/
+
+# Production
+build/
+
+# Environment Variables
+.env.*
+!.env.example
+
+# OS Customizations
+Thumbs.db
+ehthumbs.db
+Desktop.ini

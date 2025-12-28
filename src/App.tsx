@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { Layout } from "@/components/layout"
-import { HomePage, CrawlPage, ExplorePage, InsightsPage } from "@/pages"
+import { HomePage, CrawlPage, ExplorePage, InsightsPage, ComparisonPage, KnowledgeMapPage } from "@/pages"
 import { AssistantPage } from "@/pages/AssistantPage"
 import { CollectionsPage } from "@/pages/CollectionsPage"
 import { DashboardPage } from "@/pages/DashboardPage"
@@ -8,11 +8,14 @@ import { AuthProvider } from "@/context/AuthContext"
 import { AuthModal } from "@/components/ui/auth-modal"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 
+import { FloatingAssistant } from "@/components/FloatingAssistant"
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <AuthModal />
+        <FloatingAssistant />
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
@@ -45,6 +48,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <InsightsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/compare"
+              element={
+                <ProtectedRoute>
+                  <ComparisonPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/map"
+              element={
+                <ProtectedRoute>
+                  <KnowledgeMapPage />
                 </ProtectedRoute>
               }
             />

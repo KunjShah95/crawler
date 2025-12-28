@@ -11,7 +11,15 @@ import {
     AlertCircle,
     Copy,
     Check,
-    Save
+    Save,
+    FileText,
+    FileJson,
+    HelpCircle,
+    BrainCircuit,
+    Lightbulb,
+    MessageSquare,
+    Columns,
+    Rocket
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import { crawlAndAnalyze } from "@/lib/api"
+import { crawlAndAnalyze, explainUnsolved, comparePapers, generateStartupIdea, generateResearchQuestions } from "@/lib/api"
 import { saveCrawlResult, type Gap } from "@/lib/firestore"
 import { useAuth } from "@/context/AuthContext"
 
@@ -27,6 +35,7 @@ interface PaperResult {
     url: string
     title: string
     venue?: string
+    year?: string
     status: "pending" | "crawling" | "analyzing" | "success" | "error"
     error?: string
     gaps: Gap[]
@@ -43,6 +52,17 @@ export function CrawlPage() {
     const [copiedId, setCopiedId] = useState<string | null>(null)
     const [savingId, setSavingId] = useState<string | null>(null)
     const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+    const [explainingId, setExplainingId] = useState<string | null>(null)
+    const [explanations, setExplanations] = useState<Record<string, string>>({})
+
+    // Tier-2/3 States
+    const [selectedForComparison, setSelectedForComparison] = useState<string[]>([])
+    const [isComparing, setIsComparing] = useState(false)
+    const [comparisonResult, setComparisonResult] = useState<string | null>(null)
+    const [generatingIdeaId, setGeneratingIdeaId] = useState<string | null>(null)
+    const [ideas, setIdeas] = useState<Record<string, any>>({})
+    const [generatingQuestionsId, setGeneratingQuestionsId] = useState<string | null>(null)
+    const [questions, setQuestions] = useState<Record<string, string[]>>({})
 
     const handleCrawl = async () => {
         const urlList = urls
@@ -90,6 +110,7 @@ export function CrawlPage() {
                                     status: "success",
                                     title: result.title,
                                     venue: result.venue,
+                                    year: result.year,
                                     gaps: result.gaps,
                                     content: result.content,
                                 }
@@ -159,6 +180,7 @@ export function CrawlPage() {
                 url: paper.url,
                 title: paper.title,
                 venue: paper.venue,
+                year: paper.year,
                 content: paper.content || "",
                 gaps: paper.gaps,
             })
@@ -168,6 +190,124 @@ export function CrawlPage() {
         } finally {
             setSavingId(null)
         }
+    }
+
+    const checkGapRepeatCount = (problem: string) => {
+        let count = 0
+        const problemLower = problem.toLowerCase()
+        results.forEach((r) => {
+            if (r.status === "success") {
+                r.gaps.forEach((g) => {
+                    // Simple text similarity or contains check
+                    if (g.problem.toLowerCase().includes(problemLower) || problemLower.includes(g.problem.toLowerCase())) {
+                        count++
+                    }
+                })
+            }
+        })
+        return count
+    }
+
+    const handleExplainUnsolved = async (gap: Gap) => {
+        if (explainingId) return
+        setExplainingId(gap.id)
+        try {
+            const explanation = await explainUnsolved(gap.problem)
+            setExplanations(prev => ({ ...prev, [gap.id]: explanation }))
+        } catch (error) {
+            console.error("Failed to explain:", error)
+        } finally {
+            setExplainingId(null)
+        }
+    }
+
+    const toggleComparisonSelection = (url: string) => {
+        setSelectedForComparison(prev =>
+            prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url].slice(-2)
+        )
+    }
+
+    const handleCompare = async () => {
+        if (selectedForComparison.length !== 2) return
+        setIsComparing(true)
+        setComparisonResult(null)
+        try {
+            const paper1 = results.find(r => r.url === selectedForComparison[0])
+            const paper2 = results.find(r => r.url === selectedForComparison[1])
+            if (paper1 && paper2) {
+                const res = await comparePapers(
+                    { title: paper1.title, content: paper1.content || "" },
+                    { title: paper2.title, content: paper2.content || "" }
+                )
+                setComparisonResult(res)
+            }
+        } catch (error) {
+            console.error("Comparison failed:", error)
+        } finally {
+            setIsComparing(false)
+        }
+    }
+
+    const handleGenerateIdea = async (gap: Gap) => {
+        setGeneratingIdeaId(gap.id)
+        try {
+            const idea = await generateStartupIdea(gap.problem)
+            setIdeas(prev => ({ ...prev, [gap.id]: idea }))
+        } catch (error) {
+            console.error("Idea generation failed:", error)
+        } finally {
+            setGeneratingIdeaId(null)
+        }
+    }
+
+    const handleGenerateQuestions = async (gap: Gap) => {
+        setGeneratingQuestionsId(gap.id)
+        try {
+            const qs = await generateResearchQuestions(gap.problem)
+            setQuestions(prev => ({ ...prev, [gap.id]: qs }))
+        } catch (error) {
+            console.error("Question generation failed:", error)
+        } finally {
+            setGeneratingQuestionsId(null)
+        }
+    }
+
+    const handleExport = (format: "md" | "json") => {
+        if (results.length === 0) return
+
+        let content = ""
+        let filename = `gapminer-export-${new Date().toISOString().split("T")[0]}`
+        let mimeType = ""
+
+        if (format === "json") {
+            content = JSON.stringify(results, null, 2)
+            filename += ".json"
+            mimeType = "application/json"
+        } else {
+            content = "# GapMiner Research Analysis\n\n"
+            results.forEach((r) => {
+                content += `## ${r.title}\n`
+                if (r.venue) content += `**Venue:** ${r.venue} ${r.year || ""}\n`
+                content += `**URL:** ${r.url}\n\n`
+                content += `### Extracted Gaps\n`
+                r.gaps.forEach((g) => {
+                    content += `- [${g.type}] ${g.problem} (Confidence: ${Math.round(g.confidence * 100)}%)\n`
+                })
+                content += "\n---\n\n"
+            })
+            filename += ".md"
+            mimeType = "text/markdown"
+        }
+
+        const blob = new Blob([content], { type: mimeType })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
     }
 
     const totalGaps = results.reduce((acc, r) => acc + r.gaps.length, 0)
@@ -231,6 +371,28 @@ https://aclanthology.org/...`}
                                             </>
                                         )}
                                     </Button>
+                                    {results.length > 0 && !isProcessing && (
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleExport("md")}
+                                                className="gap-2"
+                                            >
+                                                <FileText className="h-4 w-4" />
+                                                Export MD
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleExport("json")}
+                                                className="gap-2"
+                                            >
+                                                <FileJson className="h-4 w-4" />
+                                                Export JSON
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
@@ -255,44 +417,77 @@ https://aclanthology.org/...`}
                             </Card>
                         )}
 
-                        {/* Stats */}
                         {results.length > 0 && !isProcessing && (
                             <div className="grid grid-cols-3 gap-4">
                                 <Card>
                                     <CardContent className="pt-6 text-center">
                                         <div className="text-3xl font-bold">{results.length}</div>
-                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            Papers
-                                        </div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">Papers</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
                                     <CardContent className="pt-6 text-center">
-                                        <div className="text-3xl font-bold text-green-500">
-                                            {successCount}
-                                        </div>
-                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            Successful
-                                        </div>
+                                        <div className="text-3xl font-bold text-green-500">{successCount}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">Success</div>
                                     </CardContent>
                                 </Card>
                                 <Card>
                                     <CardContent className="pt-6 text-center">
-                                        <div className="text-3xl font-bold text-[hsl(var(--brand-primary))]">
-                                            {totalGaps}
-                                        </div>
-                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            Gaps Found
-                                        </div>
+                                        <div className="text-3xl font-bold text-[hsl(var(--brand-primary))]">{totalGaps}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">Gaps Found</div>
                                     </CardContent>
                                 </Card>
                             </div>
+                        )}
+
+                        {selectedForComparison.length > 0 && !isProcessing && (
+                            <Card className="border-[hsl(var(--brand-primary))/30] bg-[hsl(var(--brand-primary))/5]">
+                                <CardContent className="pt-6 py-4 flex items-center justify-between">
+                                    <div className="text-sm">
+                                        <span className="font-bold">{selectedForComparison.length}</span> paper(s) selected for comparison
+                                    </div>
+                                    <Button
+                                        onClick={handleCompare}
+                                        disabled={selectedForComparison.length !== 2 || isComparing}
+                                        className="gap-2"
+                                    >
+                                        {isComparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Columns className="h-4 w-4" />}
+                                        Compare Selected
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {comparisonResult && (
+                            <Card className="border-[hsl(var(--brand-primary))/30]">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-sm flex items-center gap-2">
+                                            <Columns className="h-4 w-4 text-[hsl(var(--brand-primary))]" />
+                                            Comparison Insight
+                                        </CardTitle>
+                                        <Button variant="ghost" size="sm" onClick={() => setComparisonResult(null)} className="h-7 text-xs">Dismiss</Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="prose prose-xs dark:prose-invert max-w-none whitespace-pre-wrap text-xs leading-relaxed">
+                                        {comparisonResult}
+                                    </div>
+                                </CardContent>
+                            </Card>
                         )}
                     </div>
 
                     {/* Results Section */}
                     <div className="space-y-4">
-                        <h2 className="font-semibold text-lg">Results</h2>
+                        <h2 className="font-semibold text-lg flex items-center justify-between">
+                            Analysis Results
+                            {results.length > 0 && (
+                                <span className="text-xs font-normal text-[hsl(var(--muted-foreground))]">
+                                    Select 2 papers to compare
+                                </span>
+                            )}
+                        </h2>
 
                         {results.length === 0 ? (
                             <Card className="border-dashed">
@@ -351,7 +546,7 @@ https://aclanthology.org/...`}
                                                                 </h3>
                                                                 {paper.venue && (
                                                                     <Badge variant="secondary" className="shrink-0">
-                                                                        {paper.venue}
+                                                                        {paper.venue}{paper.year ? ` ${paper.year}` : ""}
                                                                     </Badge>
                                                                 )}
                                                             </div>
@@ -377,6 +572,23 @@ https://aclanthology.org/...`}
                                                         <div className="flex items-center gap-2">
                                                             {paper.status === "success" && (
                                                                 <Button
+                                                                    variant={selectedForComparison.includes(paper.url) ? "default" : "outline"}
+                                                                    size="sm"
+                                                                    className="h-7 text-[10px] gap-1"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        toggleComparisonSelection(paper.url)
+                                                                    }}
+                                                                >
+                                                                    {selectedForComparison.includes(paper.url) ? (
+                                                                        <>Selected</>
+                                                                    ) : (
+                                                                        <>Compare</>
+                                                                    )}
+                                                                </Button>
+                                                            )}
+                                                            {paper.status === "success" && (
+                                                                <Button
                                                                     variant="ghost"
                                                                     size="icon"
                                                                     onClick={(e) => {
@@ -384,7 +596,8 @@ https://aclanthology.org/...`}
                                                                         handleSaveResult(paper)
                                                                     }}
                                                                     disabled={savingId === paper.url || savedIds.has(paper.url)}
-                                                                    title={savedIds.has(paper.url) ? "Saved" : "Save to Firestore"}
+                                                                    title={savedIds.has(paper.url) ? "Saved" : "Save to Library"}
+                                                                    className="h-8 w-8"
                                                                 >
                                                                     {savingId === paper.url ? (
                                                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -429,15 +642,109 @@ https://aclanthology.org/...`}
                                                                                 <div>
                                                                                     <div className="flex items-center gap-2 mb-2">
                                                                                         <Badge
-                                                                                            variant={gap.type as "data" | "compute" | "evaluation" | "methodology"}
+                                                                                            variant={gap.type as "data" | "compute" | "evaluation" | "theory" | "methodology"}
                                                                                         >
                                                                                             {gap.type}
                                                                                         </Badge>
                                                                                         <span className="text-xs text-[hsl(var(--muted-foreground))]">
                                                                                             {Math.round(gap.confidence * 100)}% confidence
                                                                                         </span>
+                                                                                        {checkGapRepeatCount(gap.problem) >= 2 && (
+                                                                                            <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20 gap-1 h-5 text-[10px]">
+                                                                                                🔥 Appears in {checkGapRepeatCount(gap.problem)} papers
+                                                                                            </Badge>
+                                                                                        )}
                                                                                     </div>
                                                                                     <p className="text-sm">{gap.problem}</p>
+
+                                                                                    {explanations[gap.id] ? (
+                                                                                        <motion.div
+                                                                                            initial={{ opacity: 0, height: 0 }}
+                                                                                            animate={{ opacity: 1, height: "auto" }}
+                                                                                            className="mt-3 p-3 rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))] text-xs text-[hsl(var(--muted-foreground))]"
+                                                                                        >
+                                                                                            <div className="flex items-center gap-2 mb-2 font-medium text-[hsl(var(--foreground))]">
+                                                                                                <BrainCircuit className="h-3 w-3" />
+                                                                                                Depth Analysis
+                                                                                            </div>
+                                                                                            <div className="whitespace-pre-wrap leading-relaxed">
+                                                                                                {explanations[gap.id]}
+                                                                                            </div>
+                                                                                        </motion.div>
+                                                                                    ) : (
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            className="mt-3 h-7 text-[10px] gap-1 hover:bg-[hsl(var(--background))]"
+                                                                                            onClick={() => handleExplainUnsolved(gap)}
+                                                                                            disabled={explainingId === gap.id}
+                                                                                        >
+                                                                                            {explainingId === gap.id ? (
+                                                                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                            ) : (
+                                                                                                <HelpCircle className="h-3 w-3" />
+                                                                                            )}
+                                                                                            Why is this unsolved?
+                                                                                        </Button>
+                                                                                    )}
+
+                                                                                    {ideas[gap.id] && (
+                                                                                        <motion.div
+                                                                                            initial={{ opacity: 0, y: 10 }}
+                                                                                            animate={{ opacity: 1, y: 0 }}
+                                                                                            className="mt-3 p-3 rounded-md bg-blue-500/5 border border-blue-500/10 text-xs"
+                                                                                        >
+                                                                                            <div className="flex items-center gap-2 mb-2 font-bold text-blue-500">
+                                                                                                <Rocket className="h-3 w-3" />
+                                                                                                Startup Idea: {ideas[gap.id].idea}
+                                                                                            </div>
+                                                                                            <p className="text-[hsl(var(--muted-foreground))] italic mb-1">
+                                                                                                Target: {ideas[gap.id].audience}
+                                                                                            </p>
+                                                                                            <p className="text-[hsl(var(--muted-foreground))]">
+                                                                                                Why now: {ideas[gap.id].why_now}
+                                                                                            </p>
+                                                                                        </motion.div>
+                                                                                    )}
+
+                                                                                    {questions[gap.id] && (
+                                                                                        <motion.div
+                                                                                            initial={{ opacity: 0, y: 10 }}
+                                                                                            animate={{ opacity: 1, y: 0 }}
+                                                                                            className="mt-3 p-3 rounded-md bg-purple-500/5 border border-purple-500/10 text-xs"
+                                                                                        >
+                                                                                            <div className="flex items-center gap-2 mb-2 font-bold text-purple-500">
+                                                                                                <MessageSquare className="h-3 w-3" />
+                                                                                                Research Questions
+                                                                                            </div>
+                                                                                            <ul className="list-disc pl-4 space-y-1 text-[hsl(var(--muted-foreground))]">
+                                                                                                {questions[gap.id].map((q, i) => <li key={i}>{q}</li>)}
+                                                                                            </ul>
+                                                                                        </motion.div>
+                                                                                    )}
+
+                                                                                    <div className="flex items-center gap-2 mt-3">
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            className="h-7 text-[9px] gap-1 hover:bg-blue-500/10 hover:text-blue-500"
+                                                                                            onClick={() => handleGenerateIdea(gap)}
+                                                                                            disabled={generatingIdeaId === gap.id}
+                                                                                        >
+                                                                                            {generatingIdeaId === gap.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lightbulb className="h-3 w-3" />}
+                                                                                            Startup Idea
+                                                                                        </Button>
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            className="h-7 text-[9px] gap-1 hover:bg-purple-500/10 hover:text-purple-500"
+                                                                                            onClick={() => handleGenerateQuestions(gap)}
+                                                                                            disabled={generatingQuestionsId === gap.id}
+                                                                                        >
+                                                                                            {generatingQuestionsId === gap.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageSquare className="h-3 w-3" />}
+                                                                                            PhD Mode
+                                                                                        </Button>
+                                                                                    </div>
                                                                                 </div>
                                                                                 <Button
                                                                                     variant="ghost"
@@ -466,8 +773,8 @@ https://aclanthology.org/...`}
                             </div>
                         )}
                     </div>
-                </div>
-            </div>
-        </div>
+                </div >
+            </div >
+        </div >
     )
 }

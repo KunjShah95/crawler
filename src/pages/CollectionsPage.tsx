@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Link } from "react-router-dom"
 import {
@@ -7,131 +7,112 @@ import {
     Star,
     StarOff,
     Share2,
-
     MoreHorizontal,
     Plus,
     Search,
-
-    ExternalLink,
     Download,
-    Check
+    Check,
+    Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-
 import { cn } from "@/lib/utils"
-
-interface Collection {
-    id: string
-    name: string
-    description: string
-    gapCount: number
-    paperCount: number
-    starred: boolean
-    createdAt: string
-    color: string
-}
-
-interface Gap {
-    id: string
-    problem: string
-    paper: string
-    type: "data" | "compute" | "evaluation" | "methodology"
-}
-
-const mockCollections: Collection[] = [
-    {
-        id: "1",
-        name: "NLP Scalability Issues",
-        description: "Research gaps related to scaling language models",
-        gapCount: 8,
-        paperCount: 5,
-        starred: true,
-        createdAt: "2024-03-15",
-        color: "hsl(var(--brand-primary))"
-    },
-    {
-        id: "2",
-        name: "Evaluation Metrics Review",
-        description: "Papers discussing benchmark limitations",
-        gapCount: 12,
-        paperCount: 8,
-        starred: false,
-        createdAt: "2024-03-12",
-        color: "hsl(var(--gap-evaluation))"
-    },
-    {
-        id: "3",
-        name: "Low-Resource Languages",
-        description: "Data scarcity in multilingual models",
-        gapCount: 6,
-        paperCount: 4,
-        starred: true,
-        createdAt: "2024-03-10",
-        color: "hsl(var(--gap-data))"
-    },
-    {
-        id: "4",
-        name: "Thesis Research",
-        description: "Potential directions for my PhD research",
-        gapCount: 15,
-        paperCount: 10,
-        starred: false,
-        createdAt: "2024-03-08",
-        color: "hsl(var(--brand-secondary))"
-    }
-]
-
-const mockGaps: Gap[] = [
-    {
-        id: "1",
-        problem: "Models fail to generalize to low-resource languages due to lack of training data",
-        paper: "Scaling Laws for Neural Language Models",
-        type: "data"
-    },
-    {
-        id: "2",
-        problem: "Training costs prevent scaling to long-context inputs beyond 32K tokens",
-        paper: "GPT-4 Technical Report",
-        type: "compute"
-    },
-    {
-        id: "3",
-        problem: "Evaluation benchmarks don't reflect real-world conversational complexity",
-        paper: "Attention Is All You Need",
-        type: "evaluation"
-    }
-]
+import { useAuth } from "@/context/AuthContext"
+import {
+    getCollections,
+    saveCollection,
+    toggleCollectionStar,
+    getCrawlResults,
+    type Collection
+} from "@/lib/firestore"
 
 export function CollectionsPage() {
-    const [collections, setCollections] = useState(mockCollections)
+    const { user } = useAuth()
+    const [collections, setCollections] = useState<Collection[]>([])
     const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState("")
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [newCollectionName, setNewCollectionName] = useState("")
+    const [newCollectionDescription, setNewCollectionDescription] = useState("")
+    const [isLoading, setIsLoading] = useState(true)
+    const [allGaps, setAllGaps] = useState<any[]>([])
 
-    const toggleStar = (id: string) => {
+    useEffect(() => {
+        if (!user) return
+
+        async function loadData() {
+            try {
+                const [collectionsData, resultsData] = await Promise.all([
+                    getCollections(user!.id),
+                    getCrawlResults(user!.id)
+                ])
+                setCollections(collectionsData)
+
+                // Flatten gaps for display
+                const gaps = resultsData.flatMap(r => r.gaps.map(g => ({
+                    ...g,
+                    paper: r.title,
+                })))
+                setAllGaps(gaps)
+            } catch (error) {
+                console.error("Failed to load collections:", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        loadData()
+    }, [user])
+
+    const handleToggleStar = async (collection: Collection) => {
+        if (!collection.id) return
+        const newStarred = !collection.starred
+
+        // Optimistic update
         setCollections(prev =>
-            prev.map(c => c.id === id ? { ...c, starred: !c.starred } : c)
+            prev.map(c => c.id === collection.id ? { ...c, starred: newStarred } : c)
         )
+
+        try {
+            await toggleCollectionStar(collection.id, newStarred)
+        } catch (error) {
+            console.error("Failed to toggle star:", error)
+            // Rollback
+            setCollections(prev =>
+                prev.map(c => c.id === collection.id ? { ...c, starred: !newStarred } : c)
+            )
+        }
     }
 
-    const handleCreateCollection = () => {
-        if (!newCollectionName.trim()) return
-        const newCollection: Collection = {
-            id: Date.now().toString(),
+    const handleCreateCollection = async () => {
+        if (!user || !newCollectionName.trim()) return
+
+        const collectionData = {
+            userId: user.id,
             name: newCollectionName,
-            description: "",
+            description: newCollectionDescription,
             gapCount: 0,
             paperCount: 0,
             starred: false,
-            createdAt: new Date().toISOString().split("T")[0],
-            color: `hsl(${Math.random() * 360}, 70%, 50%)`
+            color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
+            gapIds: []
         }
-        setCollections(prev => [newCollection, ...prev])
-        setNewCollectionName("")
-        setShowCreateModal(false)
+
+        try {
+            const id = await saveCollection(collectionData)
+            const newCollection: Collection = {
+                ...collectionData,
+                id,
+                createdAt: (await import("firebase/firestore")).Timestamp.now()
+            }
+            setCollections(prev => [newCollection, ...prev])
+            setNewCollectionName("")
+            setNewCollectionDescription("")
+            setShowCreateModal(false)
+        } catch (error) {
+            console.error("Failed to create collection:", error)
+        }
     }
 
     const filteredCollections = collections.filter(c =>
@@ -141,6 +122,17 @@ export function CollectionsPage() {
 
     const starredCollections = filteredCollections.filter(c => c.starred)
     const otherCollections = filteredCollections.filter(c => !c.starred)
+
+    const selectedCollectionData = collections.find(c => c.id === selectedCollection)
+    const selectedGaps = allGaps.filter(g => selectedCollectionData?.gapIds.includes(g.id))
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--brand-primary))]" />
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen py-12">
@@ -201,7 +193,7 @@ export function CollectionsPage() {
                                                     "cursor-pointer card-hover",
                                                     selectedCollection === collection.id && "ring-2 ring-[hsl(var(--ring))]"
                                                 )}
-                                                onClick={() => setSelectedCollection(collection.id)}
+                                                onClick={() => setSelectedCollection(collection.id || null)}
                                             >
                                                 <CardContent className="pt-6">
                                                     <div className="flex items-start justify-between mb-3">
@@ -215,7 +207,7 @@ export function CollectionsPage() {
                                                             />
                                                         </div>
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); toggleStar(collection.id) }}
+                                                            onClick={(e) => { e.stopPropagation(); handleToggleStar(collection) }}
                                                             className="p-1 hover:bg-[hsl(var(--muted))] rounded"
                                                         >
                                                             <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
@@ -244,59 +236,65 @@ export function CollectionsPage() {
                                 <Folder className="h-4 w-4" />
                                 All Collections
                             </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {otherCollections.map((collection, idx) => (
-                                    <motion.div
-                                        key={collection.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: idx * 0.05 }}
-                                    >
-                                        <Card
-                                            className={cn(
-                                                "cursor-pointer card-hover",
-                                                selectedCollection === collection.id && "ring-2 ring-[hsl(var(--ring))]"
-                                            )}
-                                            onClick={() => setSelectedCollection(collection.id)}
+                            {otherCollections.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {otherCollections.map((collection, idx) => (
+                                        <motion.div
+                                            key={collection.id}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
                                         >
-                                            <CardContent className="pt-6">
-                                                <div className="flex items-start justify-between mb-3">
-                                                    <div
-                                                        className="h-10 w-10 rounded-lg flex items-center justify-center"
-                                                        style={{ backgroundColor: collection.color + "20" }}
-                                                    >
-                                                        <Folder
-                                                            className="h-5 w-5"
-                                                            style={{ color: collection.color }}
-                                                        />
+                                            <Card
+                                                className={cn(
+                                                    "cursor-pointer card-hover",
+                                                    selectedCollection === collection.id && "ring-2 ring-[hsl(var(--ring))]"
+                                                )}
+                                                onClick={() => setSelectedCollection(collection.id || null)}
+                                            >
+                                                <CardContent className="pt-6">
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div
+                                                            className="h-10 w-10 rounded-lg flex items-center justify-center"
+                                                            style={{ backgroundColor: collection.color + "20" }}
+                                                        >
+                                                            <Folder
+                                                                className="h-5 w-5"
+                                                                style={{ color: collection.color }}
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleToggleStar(collection) }}
+                                                            className="p-1 hover:bg-[hsl(var(--muted))] rounded"
+                                                        >
+                                                            <StarOff className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+                                                        </button>
                                                     </div>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); toggleStar(collection.id) }}
-                                                        className="p-1 hover:bg-[hsl(var(--muted))] rounded"
-                                                    >
-                                                        <StarOff className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                                                    </button>
-                                                </div>
-                                                <h3 className="font-semibold mb-1">{collection.name}</h3>
-                                                <p className="text-sm text-[hsl(var(--muted-foreground))] mb-4 line-clamp-2">
-                                                    {collection.description}
-                                                </p>
-                                                <div className="flex items-center gap-3 text-xs text-[hsl(var(--muted-foreground))]">
-                                                    <span>{collection.gapCount} gaps</span>
-                                                    <span>•</span>
-                                                    <span>{collection.paperCount} papers</span>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </motion.div>
-                                ))}
-                            </div>
+                                                    <h3 className="font-semibold mb-1">{collection.name}</h3>
+                                                    <p className="text-sm text-[hsl(var(--muted-foreground))] mb-4 line-clamp-2">
+                                                        {collection.description}
+                                                    </p>
+                                                    <div className="flex items-center gap-3 text-xs text-[hsl(var(--muted-foreground))]">
+                                                        <span>{collection.gapCount} gaps</span>
+                                                        <span>•</span>
+                                                        <span>{collection.paperCount} papers</span>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-[hsl(var(--muted-foreground))] py-8 text-center border rounded-lg border-dashed">
+                                    No other collections found.
+                                </p>
+                            )}
                         </div>
                     </div>
 
                     {/* Sidebar - Collection Details */}
                     <div>
-                        {selectedCollection ? (
+                        {selectedCollectionData ? (
                             <Card className="sticky top-20">
                                 <CardHeader className="pb-3">
                                     <div className="flex items-center justify-between">
@@ -318,29 +316,31 @@ export function CollectionsPage() {
                                     <div>
                                         <h4 className="text-sm font-medium mb-2">Gaps in this collection</h4>
                                         <div className="space-y-2">
-                                            {mockGaps.map((gap) => (
-                                                <div
-                                                    key={gap.id}
-                                                    className="p-3 rounded-lg bg-[hsl(var(--muted))] text-sm"
-                                                >
-                                                    <p className="line-clamp-2 text-xs">{gap.problem}</p>
-                                                    <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1">
-                                                        {gap.paper}
-                                                    </p>
-                                                </div>
-                                            ))}
+                                            {selectedGaps.length > 0 ? (
+                                                selectedGaps.map((gap: any) => (
+                                                    <div
+                                                        key={gap.id}
+                                                        className="p-3 rounded-lg bg-[hsl(var(--muted))] text-sm"
+                                                    >
+                                                        <p className="line-clamp-2 text-xs">{gap.problem}</p>
+                                                        <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1">
+                                                            {gap.paper}
+                                                        </p>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                    No gaps in this collection yet.
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 
                                     <div className="pt-4 border-t border-[hsl(var(--border))] space-y-2">
-                                        <Button variant="outline" size="sm" className="w-full gap-2">
-                                            <Plus className="h-3 w-3" />
-                                            Add Gaps
-                                        </Button>
                                         <Link to="/explore">
-                                            <Button variant="ghost" size="sm" className="w-full gap-2">
-                                                <ExternalLink className="h-3 w-3" />
-                                                Browse All Gaps
+                                            <Button variant="outline" size="sm" className="w-full gap-2">
+                                                <Plus className="h-3 w-3" />
+                                                Add Gaps from Explore
                                             </Button>
                                         </Link>
                                     </div>
@@ -382,25 +382,37 @@ export function CollectionsPage() {
                                     <CardTitle>Create New Collection</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <div>
-                                        <label className="text-sm font-medium mb-2 block">
-                                            Collection Name
-                                        </label>
-                                        <Input
-                                            placeholder="e.g., NLP Research Gaps"
-                                            value={newCollectionName}
-                                            onChange={(e) => setNewCollectionName(e.target.value)}
-                                            autoFocus
-                                        />
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-sm font-medium mb-2 block">
+                                                Collection Name
+                                            </label>
+                                            <Input
+                                                placeholder="e.g., NLP Research Gaps"
+                                                value={newCollectionName}
+                                                onChange={(e) => setNewCollectionName(e.target.value)}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium mb-2 block">
+                                                Description (Optional)
+                                            </label>
+                                            <Input
+                                                placeholder="What is this collection about?"
+                                                value={newCollectionDescription}
+                                                onChange={(e) => setNewCollectionDescription(e.target.value)}
+                                            />
+                                        </div>
                                     </div>
-                                    <div className="flex gap-2 justify-end">
+                                    <div className="flex gap-2 justify-end pt-4">
                                         <Button
                                             variant="outline"
                                             onClick={() => setShowCreateModal(false)}
                                         >
                                             Cancel
                                         </Button>
-                                        <Button onClick={handleCreateCollection}>
+                                        <Button onClick={handleCreateCollection} disabled={!newCollectionName.trim()}>
                                             <Check className="h-4 w-4 mr-2" />
                                             Create
                                         </Button>

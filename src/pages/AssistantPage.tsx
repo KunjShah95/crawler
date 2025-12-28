@@ -84,10 +84,16 @@ export function AssistantPage() {
         try {
             const paperContext = papers.map(p => ({
                 title: p.title,
-                content: p.content
+                content: p.content,
+                gaps: p.gaps,
+                venue: p.venue
             }))
 
-            const responseText = await chatWithPapers(text, paperContext)
+            const responseText = await chatWithPapers(
+                text,
+                paperContext,
+                messages.map(m => ({ role: m.role, content: m.content }))
+            )
 
             const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
@@ -161,7 +167,7 @@ export function AssistantPage() {
                                                     key={i}
                                                     variant="outline"
                                                     size="sm"
-                                                    className="text-xs"
+                                                    className="text-xs whitespace-normal text-left h-auto"
                                                     onClick={() => handleSend(q)}
                                                 >
                                                     {q}
@@ -314,7 +320,7 @@ export function AssistantPage() {
                                     <Button
                                         key={i}
                                         variant="ghost"
-                                        className="w-full justify-start text-left h-auto py-2 text-sm font-normal"
+                                        className="w-full justify-start text-left h-auto py-2 text-sm font-normal whitespace-normal break-words"
                                         onClick={() => handleSend(q)}
                                     >
                                         {q}

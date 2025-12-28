@@ -39,6 +39,7 @@
   --gap-compute: 0 84% 60%;
   --gap-evaluation: 142 71% 45%;
   --gap-methodology: 221 83% 53%;
+  --gap-theory: 271 81% 56%;
 }
 
 .dark {
@@ -311,6 +312,12 @@ h6 {
   border: 1px solid hsl(var(--gap-methodology) / 0.3);
 }
 
+.tag-theory {
+  background: hsl(var(--gap-theory) / 0.15);
+  color: hsl(var(--gap-theory));
+  border: 1px solid hsl(var(--gap-theory) / 0.3);
+}
+
 /* Section Numbering */
 .section-number {
   font-family: 'Inter', monospace;
@@ -441,6 +448,7 @@ h6 {
   border-radius: inherit;
   background: linear-gradient(135deg, hsl(var(--brand-primary)), hsl(var(--brand-secondary)));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
 }
@@ -558,19 +566,16 @@ h6 {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
 }
 
 .line-clamp-2 {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .line-clamp-3 {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
 }
