@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Sparkles, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,14 +18,13 @@ export function AuthModal() {
 
     const [error, setError] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const navigate = useNavigate()
 
     const handleGoogleSignIn = async () => {
         setError("")
         setIsLoading(true)
         try {
             await loginWithGoogle()
-            navigate("/explore")
+            // Navigation to /dashboard is handled by AuthContext
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to sign in with Google")
         } finally {

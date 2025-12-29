@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { Layout } from "@/components/layout"
-import { HomePage, CrawlPage, ExplorePage, InsightsPage, ComparisonPage, KnowledgeMapPage } from "@/pages"
+import { HomePage, DashboardPage, CrawlPage, ExplorePage, InsightsPage, ComparisonPage, KnowledgeMapPage } from "@/pages"
 import { AssistantPage } from "@/pages/AssistantPage"
 import { CollectionsPage } from "@/pages/CollectionsPage"
 import { AuthProvider } from "@/context/AuthContext"
@@ -11,13 +11,21 @@ import { FloatingAssistant } from "@/components/FloatingAssistant"
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
         <AuthModal />
         <FloatingAssistant />
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/crawl"
               element={
@@ -76,8 +84,8 @@ function App() {
             />
           </Route>
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }
 

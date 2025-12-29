@@ -1,4 +1,5 @@
 export { HomePage } from "./HomePage"
+export { DashboardPage } from "./DashboardPage"
 export { CrawlPage } from "./CrawlPage"
 export { ExplorePage } from "./ExplorePage"
 export { InsightsPage } from "./InsightsPage"

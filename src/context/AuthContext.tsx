@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { useNavigate } from "react-router-dom"
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
@@ -44,6 +45,7 @@ function mapFirebaseUser(firebaseUser: FirebaseUser): User {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+    const navigate = useNavigate()
     const [user, setUser] = useState<User | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [showAuthModal, setShowAuthModal] = useState(false)
@@ -71,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await signInWithEmailAndPassword(auth, email, password)
             setShowAuthModal(false)
+            navigate("/dashboard")
         } catch (error: unknown) {
             const firebaseError = error as { code?: string; message?: string }
             if (firebaseError.code === "auth/user-not-found") {
@@ -103,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Update local state with the name
             setUser(mapFirebaseUser({ ...userCredential.user, displayName: name } as FirebaseUser))
             setShowAuthModal(false)
+            navigate("/dashboard")
         } catch (error: unknown) {
             const firebaseError = error as { code?: string; message?: string }
             if (firebaseError.code === "auth/email-already-in-use") {
@@ -123,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await signInWithPopup(auth, googleProvider)
             setShowAuthModal(false)
+            navigate("/dashboard")
         } catch (error: unknown) {
             const firebaseError = error as { code?: string; message?: string }
             if (firebaseError.code === "auth/popup-closed-by-user") {
