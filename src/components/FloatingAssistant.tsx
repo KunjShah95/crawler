@@ -9,18 +9,24 @@ import {
     Maximize2,
     Minimize2,
     Bot,
-    ChevronDown,
     Brain
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
-import { getCrawlResults, type CrawlResult } from "@/lib/firestore"
-import { chatWithPapers } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import { chatWithPapers } from "@/api/gemini"
+import { cn } from "@/utils"
+import * as authApi from "@/auth/api"
 
 interface Message {
     role: "user" | "assistant"
     content: string
+}
+
+interface PaperContext {
+    title: string
+    content: string
+    gaps?: string[]
+    venue?: string
 }
 
 export function FloatingAssistant() {
@@ -32,7 +38,7 @@ export function FloatingAssistant() {
         { role: "assistant", content: "Hi! I'm your Research Assistant. I can help you analyze the papers in your library. What would you like to know?" }
     ])
     const [isTyping, setIsTyping] = useState(false)
-    const [papers, setPapers] = useState<CrawlResult[]>([])
+    const [papers, setPapers] = useState<PaperContext[]>([])
     const scrollRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -44,8 +50,20 @@ export function FloatingAssistant() {
     useEffect(() => {
         async function load() {
             if (!user) return
-            const data = await getCrawlResults(user.id)
-            setPapers(data)
+            try {
+                const response = await authApi.getPapers()
+                if (response.success && response.data) {
+                    const paperData = response.data.map(p => ({
+                        title: p.title,
+                        content: p.abstract || "",
+                        gaps: p.research_gaps,
+                        venue: p.venue
+                    }))
+                    setPapers(paperData)
+                }
+            } catch {
+                setPapers([])
+            }
         }
         load()
     }, [user])
@@ -59,16 +77,9 @@ export function FloatingAssistant() {
         setIsTyping(true)
 
         try {
-            const paperContext = papers.map(p => ({
-                title: p.title,
-                content: p.content,
-                gaps: p.gaps,
-                venue: p.venue
-            }))
-
             const responseText = await chatWithPapers(
                 userMsg,
-                paperContext,
+                papers,
                 messages.map(m => ({ role: m.role, content: m.content }))
             )
             setMessages(prev => [...prev, { role: "assistant", content: responseText }])
@@ -90,132 +101,127 @@ export function FloatingAssistant() {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 20 }}
                         className={cn(
-                            "mb-2 w-[350px] shadow-2xl rounded-2xl overflow-hidden border border-[hsl(var(--border))] glass transition-all duration-300",
+                            "mb-2 w-[350px] shadow-2xl rounded-2xl overflow-hidden border border-[rgb(var(--border))]",
                             isExpanded ? "w-[500px] h-[600px]" : "h-[450px]"
                         )}
                     >
-                        <div className="flex flex-col h-full bg-[hsl(var(--card))]/80 backdrop-blur-xl">
+                        <div className="flex flex-col h-full bg-[rgb(var(--card))]/80 backdrop-blur-xl">
                             {/* Header */}
-                            <div className="p-4 border-b border-[hsl(var(--border))] flex items-center justify-between bg-gradient-to-r from-[hsl(var(--brand-primary))]/10 to-[hsl(var(--brand-secondary))]/10">
+                            <div className="p-4 border-b border-[rgb(var(--border))] flex items-center justify-between bg-[rgb(var(--primary))]/10">
                                 <div className="flex items-center gap-2">
-                                    <div className="p-1.5 rounded-lg bg-[hsl(var(--brand-primary))] text-white">
+                                    <div className="p-1.5 rounded-lg bg-[rgb(var(--primary))] text-white">
                                         <Brain className="h-4 w-4" />
                                     </div>
                                     <div>
                                         <h3 className="text-sm font-bold">Research Assistant</h3>
-                                        <p className="text-[10px] text-[hsl(var(--muted-foreground))] flex items-center gap-1">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                                            {papers.length} papers in context
+                                        <p className="text-xs text-[rgb(var(--muted-foreground))] flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                            {papers.length} papers loaded
                                         </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-[hsl(var(--muted-foreground))]"
+                                    <button
                                         onClick={() => setIsExpanded(!isExpanded)}
+                                        className="p-1.5 hover:bg-[rgb(var(--muted))] rounded transition-colors"
                                     >
                                         {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-[hsl(var(--muted-foreground))] hover:text-red-500"
+                                    </button>
+                                    <button
                                         onClick={() => setIsOpen(false)}
+                                        className="p-1.5 hover:bg-[rgb(var(--muted))] rounded transition-colors"
                                     >
-                                        <X className="h-4 x-4" />
-                                    </Button>
+                                        <X className="h-4 w-4" />
+                                    </button>
                                 </div>
                             </div>
 
                             {/* Messages */}
                             <div
                                 ref={scrollRef}
-                                className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar"
+                                className="flex-1 overflow-y-auto p-4 space-y-4"
                             >
-                                {messages.map((msg, i) => (
-                                    <div
+                                {messages.map((message, i) => (
+                                    <motion.div
                                         key={i}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
                                         className={cn(
-                                            "flex gap-2 max-w-[85%]",
-                                            msg.role === "user" ? "ml-auto flex-row-reverse" : ""
+                                            "flex gap-3",
+                                            message.role === "assistant" ? "flex-row" : "flex-row-reverse"
                                         )}
                                     >
                                         <div className={cn(
-                                            "h-8 w-8 rounded-full flex items-center justify-center shrink-0",
-                                            msg.role === "assistant" ? "bg-[hsl(var(--brand-primary))] text-white" : "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
+                                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                                            message.role === "assistant" ? "bg-[rgb(var(--primary))]/10" : "bg-[rgb(var(--muted))]"
                                         )}>
-                                            {msg.role === "assistant" ? <Sparkles className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                                            {message.role === "assistant" ? <Bot className="h-4 w-4 text-[rgb(var(--primary))]" /> : <MessageSquare className="h-4 w-4" />}
                                         </div>
                                         <div className={cn(
-                                            "p-3 rounded-2xl text-sm leading-relaxed",
-                                            msg.role === "assistant"
-                                                ? "bg-[hsl(var(--muted))]/50 border border-[hsl(var(--border))]"
-                                                : "bg-[hsl(var(--brand-primary))] text-white shadow-md shadow-[hsl(var(--brand-primary))]/20"
+                                            "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm",
+                                            message.role === "assistant" ? "bg-[rgb(var(--muted))]" : "bg-[rgb(var(--primary))] text-white"
                                         )}>
-                                            {msg.content}
+                                            {message.content}
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 ))}
                                 {isTyping && (
-                                    <div className="flex gap-2 max-w-[85%]">
-                                        <div className="h-8 w-8 rounded-full bg-[hsl(var(--brand-primary))] text-white flex items-center justify-center shrink-0">
-                                            <Sparkles className="h-4 w-4" />
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        className="flex gap-3"
+                                    >
+                                        <div className="w-8 h-8 rounded-full bg-[rgb(var(--primary))]/10 flex items-center justify-center shrink-0">
+                                            <Bot className="h-4 w-4 text-[rgb(var(--primary))]" />
                                         </div>
-                                        <div className="p-3 rounded-2xl bg-[hsl(var(--muted))]/50 border border-[hsl(var(--border))]">
-                                            <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--brand-primary))]" />
+                                        <div className="bg-[rgb(var(--muted))] rounded-2xl px-4 py-3">
+                                            <div className="flex gap-1">
+                                                <span className="w-2 h-2 rounded-full bg-[rgb(var(--muted-foreground))] animate-bounce" style={{ animationDelay: "0ms" }} />
+                                                <span className="w-2 h-2 rounded-full bg-[rgb(var(--muted-foreground))] animate-bounce" style={{ animationDelay: "150ms" }} />
+                                                <span className="w-2 h-2 rounded-full bg-[rgb(var(--muted-foreground))] animate-bounce" style={{ animationDelay: "300ms" }} />
+                                            </div>
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 )}
                             </div>
 
                             {/* Input */}
-                            <div className="p-4 border-t border-[hsl(var(--border))]">
-                                <div className="relative group">
+                            <div className="p-4 border-t border-[rgb(var(--border))]">
+                                <div className="flex items-center gap-2">
                                     <input
                                         type="text"
-                                        placeholder="Ask about your research..."
-                                        className="w-full bg-[hsl(var(--muted))]/30 border border-[hsl(var(--border))] rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--brand-primary))]/20 focus:border-[hsl(var(--brand-primary))] transition-all"
                                         value={input}
                                         onChange={(e) => setInput(e.target.value)}
                                         onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                                        placeholder="Ask about your research..."
+                                        className="flex-1 px-4 py-2 bg-[rgb(var(--muted))] border border-[rgb(var(--border))] rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[rgb(var(--primary))] focus:border-transparent"
                                     />
                                     <Button
-                                        size="icon"
-                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 w-8 bg-[hsl(var(--brand-primary))] hover:bg-[hsl(var(--brand-primary))]/90 text-white rounded-lg transition-transform active:scale-95"
-                                        disabled={!input.trim() || isTyping}
                                         onClick={handleSend}
+                                        disabled={!input.trim() || isTyping}
+                                        size="icon"
+                                        className="rounded-full bg-[rgb(var(--primary))] hover:opacity-90"
                                     >
-                                        <Send className="h-4 w-4" />
+                                        {isTyping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                                     </Button>
                                 </div>
-                                <p className="mt-2 text-[8px] text-center text-[hsl(var(--muted-foreground))] uppercase tracking-widest font-bold">
-                                    Powered by Gemini 2.0 Flash
-                                </p>
                             </div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Bubble Button */}
+            {/* Toggle Button */}
             <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsOpen(!isOpen)}
                 className={cn(
-                    "h-14 w-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative group",
-                    isOpen
-                        ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] border border-[hsl(var(--border))]"
-                        : "bg-[hsl(var(--brand-primary))] text-white"
+                    "w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all",
+                    isOpen ? "bg-[rgb(var(--muted))]" : "bg-[rgb(var(--primary))] text-white"
                 )}
             >
-                <div className="absolute inset-0 rounded-full bg-[hsl(var(--brand-primary))] blur-xl opacity-20 group-hover:opacity-40 transition-opacity" />
-                {isOpen ? <ChevronDown className="h-6 w-6 z-10" /> : <MessageSquare className="h-6 w-6 z-10" />}
-                {!isOpen && (
-                    <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full border-2 border-[hsl(var(--background))] z-20 pulse-soft" />
-                )}
+                {isOpen ? <X className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
             </motion.button>
         </div>
     )

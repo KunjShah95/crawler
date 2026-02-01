@@ -1,10 +1,21 @@
 // API service for Firecrawl and Gemini integration
 // Uses direct REST API calls for browser compatibility
 import { GoogleGenAI } from "@google/genai"
-import type { Gap } from "./firestore"
 
 // Re-export Gap type for convenience
-export type { Gap }
+export interface Gap {
+    id: string
+    problem: string
+    type: "data" | "compute" | "evaluation" | "theory" | "deployment" | "methodology"
+    confidence: number
+    impactScore: string
+    difficulty: string
+    assumptions: string[]
+    failures: string[]
+    datasetGaps: string[]
+    evaluationCritique: string
+    paper?: string
+}
 
 // Initialize Gemini
 const genai = new GoogleGenAI({

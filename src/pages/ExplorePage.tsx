@@ -36,6 +36,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { getCrawlResults } from "@/lib/firestore"
 import { useAuth } from "@/context/AuthContext"
+import PrimeHero from "@/components/layout/PrimeHero"
 import {
     explainUnsolved,
     generateStartupIdea,
@@ -182,33 +183,8 @@ export function ExplorePage() {
     return (
         <div className="min-h-screen py-12">
             <div className="container-wide">
-                {/* Header Section */}
-                <div className="mb-12">
-                    <div className="section-number mb-4">EXPLORE</div>
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                        <div>
-                            <h1 className="heading-section mb-4">
-                                Research Gap
-                                <br />
-                                <span className="gradient-text">Repository</span>
-                            </h1>
-                            <p className="text-lg text-[hsl(var(--muted-foreground))] max-w-2xl">
-                                Browse {results.length} identified gaps across your paper library.
-                                Filter by domain, importance, or research direction.
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => exportToMarkdown(results)} className="gap-2">
-                                <FileText className="h-4 w-4" />
-                                Export MD
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => exportToJSON(results)} className="gap-2">
-                                <FileJson className="h-4 w-4" />
-                                Export JSON
-                            </Button>
-                        </div>
-                    </div>
-                </div>
+                {/* PRIME Header */}
+                <PrimeHero />
 
                 {/* Search and Filter Bar */}
                 <div className="mb-8 flex flex-col md:flex-row gap-4">

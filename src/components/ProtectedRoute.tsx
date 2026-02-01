@@ -14,7 +14,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
-            setAuthModalMode("signin")
+            setAuthModalMode("login")
             setShowAuthModal(true)
         }
     }, [isLoading, isAuthenticated, setAuthModalMode, setShowAuthModal])

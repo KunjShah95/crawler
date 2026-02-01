@@ -190,7 +190,7 @@ export type ThemeCluster = z.infer<typeof ThemeClusterSchema>;
 // URL Validation
 // ============================================================================
 
-const ALLOWED_PAPER_DOMAINS = [
+export const ALLOWED_PAPER_DOMAINS = [
     'arxiv.org',
     'openreview.net',
     'aclanthology.org',

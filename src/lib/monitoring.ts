@@ -21,7 +21,7 @@ export interface ErrorLog {
     sessionId: string
     url: string
     userAgent: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
     timestamp: Timestamp
 }
 
@@ -37,6 +37,21 @@ export interface PerformanceMetric {
     timestamp: Timestamp
 }
 
+export interface APIUsageLog {
+    id?: string
+    endpoint: string
+    model?: string
+    inputTokens: number
+    outputTokens: number
+    cost: number
+    latency: number
+    success: boolean
+    errorMessage?: string
+    userId?: string
+    sessionId: string
+    timestamp: Timestamp
+}
+
 // ============================================
 // SESSION & CONFIG
 // ============================================
@@ -44,6 +59,9 @@ export interface PerformanceMetric {
 let sessionId = ""
 let currentUserId: string | null = null
 let isInitialized = false
+let errorCollection: string = "errorLogs"
+let perfCollection: string = "performanceMetrics"
+let apiCollection: string = "apiUsageLogs"
 
 function getSessionId(): string {
     if (!sessionId) {
@@ -52,13 +70,20 @@ function getSessionId(): string {
     return sessionId
 }
 
-export function initErrorTracking(userId?: string) {
+export function initErrorTracking(options?: {
+    userId?: string
+    errorCollectionName?: string
+    perfCollectionName?: string
+    apiCollectionName?: string
+}) {
     if (isInitialized) return
 
-    currentUserId = userId || null
+    currentUserId = options?.userId || null
+    if (options?.errorCollectionName) errorCollection = options.errorCollectionName
+    if (options?.perfCollectionName) perfCollection = options.perfCollectionName
+    if (options?.apiCollectionName) apiCollection = options.apiCollectionName
     isInitialized = true
 
-    // Global error handler
     window.onerror = (message, source, lineno, colno, error) => {
         trackError({
             message: String(message),
@@ -70,7 +95,6 @@ export function initErrorTracking(userId?: string) {
         return false
     }
 
-    // Unhandled promise rejections
     window.onunhandledrejection = (event) => {
         trackError({
             message: event.reason?.message || "Unhandled promise rejection",
@@ -81,7 +105,6 @@ export function initErrorTracking(userId?: string) {
         })
     }
 
-    // Performance observer
     if ("PerformanceObserver" in window) {
         try {
             const observer = new PerformanceObserver((list) => {
@@ -119,7 +142,7 @@ interface TrackErrorOptions {
     stack?: string
     severity?: ErrorSeverity
     category?: ErrorCategory
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
 }
 
 export async function trackError(options: TrackErrorOptions): Promise<void> {
@@ -144,33 +167,30 @@ export async function trackError(options: TrackErrorOptions): Promise<void> {
         timestamp: Timestamp.now(),
     }
 
-    // Log to console in development
     if (import.meta.env.DEV) {
         console.error("[Error Tracked]", errorLog)
     }
 
-    // Send to Firestore
     try {
-        await addDoc(collection(db, "errorLogs"), errorLog)
+        await addDoc(collection(db, errorCollection), errorLog)
     } catch (e) {
         console.error("Failed to log error:", e)
     }
 }
 
-// Convenience methods
-export function trackAPIError(message: string, metadata?: Record<string, any>) {
+export function trackAPIError(message: string, metadata?: Record<string, unknown>) {
     trackError({ message, category: "api", severity: "medium", metadata })
 }
 
-export function trackUIError(message: string, metadata?: Record<string, any>) {
+export function trackUIError(message: string, metadata?: Record<string, unknown>) {
     trackError({ message, category: "ui", severity: "low", metadata })
 }
 
-export function trackAuthError(message: string, metadata?: Record<string, any>) {
+export function trackAuthError(message: string, metadata?: Record<string, unknown>) {
     trackError({ message, category: "auth", severity: "high", metadata })
 }
 
-export function trackNetworkError(message: string, metadata?: Record<string, any>) {
+export function trackNetworkError(message: string, metadata?: Record<string, unknown>) {
     trackError({ message, category: "network", severity: "medium", metadata })
 }
 
@@ -200,13 +220,11 @@ export async function trackPerformance(
     }
 
     try {
-        await addDoc(collection(db, "performanceMetrics"), metric)
+        await addDoc(collection(db, perfCollection), metric)
     } catch (e) {
-        // Silently fail for perf metrics
     }
 }
 
-// API timing helper
 export function createAPITimer(endpoint: string) {
     const start = performance.now()
     return {
@@ -221,6 +239,44 @@ export function createAPITimer(endpoint: string) {
 }
 
 // ============================================
+// API USAGE TRACKING
+// ============================================
+
+export async function trackAPIUsage(options: {
+    endpoint: string
+    model?: string
+    inputTokens: number
+    outputTokens: number
+    cost: number
+    latency: number
+    success: boolean
+    errorMessage?: string
+}): Promise<void> {
+    const usageLog: Omit<APIUsageLog, "id"> = {
+        endpoint: options.endpoint,
+        model: options.model,
+        inputTokens: options.inputTokens,
+        outputTokens: options.outputTokens,
+        cost: options.cost,
+        latency: options.latency,
+        success: options.success,
+        errorMessage: options.errorMessage,
+        userId: currentUserId || undefined,
+        sessionId: getSessionId(),
+        timestamp: Timestamp.now(),
+    }
+
+    if (import.meta.env.DEV) {
+        console.log("[API Usage]", options.endpoint, `${options.cost.toFixed(4)}`, `${options.latency}ms`)
+    }
+
+    try {
+        await addDoc(collection(db, apiCollection), usageLog)
+    } catch (e) {
+    }
+}
+
+// ============================================
 // USER FEEDBACK
 // ============================================
 
@@ -229,7 +285,7 @@ export interface UserFeedback {
     message: string
     email?: string
     screenshot?: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
 }
 
 export async function submitFeedback(feedback: UserFeedback): Promise<boolean> {
@@ -259,7 +315,7 @@ interface CacheEntry<T> {
 }
 
 class CacheManager {
-    private cache = new Map<string, CacheEntry<any>>()
+    private cache = new Map<string, CacheEntry<unknown>>()
     private storage: Storage | null = null
 
     constructor() {
@@ -278,7 +334,7 @@ class CacheManager {
             for (const key of keys) {
                 const data = this.storage.getItem(key)
                 if (data) {
-                    const entry = JSON.parse(data) as CacheEntry<any>
+                    const entry = JSON.parse(data) as CacheEntry<unknown>
                     if (this.isValid(entry)) {
                         this.cache.set(key.replace("cache_", ""), entry)
                     } else {
@@ -287,11 +343,10 @@ class CacheManager {
                 }
             }
         } catch {
-            // Ignore storage errors
         }
     }
 
-    private isValid(entry: CacheEntry<any>): boolean {
+    private isValid(entry: CacheEntry<unknown>): boolean {
         return Date.now() - entry.timestamp < entry.ttl
     }
 
@@ -316,7 +371,6 @@ class CacheManager {
             try {
                 this.storage.setItem(`cache_${key}`, JSON.stringify(entry))
             } catch {
-                // Storage full, clear old entries
                 this.clearExpired()
             }
         }
@@ -348,7 +402,6 @@ class CacheManager {
 
 export const cache = new CacheManager()
 
-// Cached fetch helper
 export async function cachedFetch<T>(
     key: string,
     fetcher: () => Promise<T>,
@@ -369,4 +422,42 @@ export async function cachedFetch<T>(
         timer.end(false)
         throw error
     }
+}
+
+// ============================================
+// RATE LIMITING
+// ============================================
+
+interface RateLimitConfig {
+    windowMs: number
+    maxRequests: number
+}
+
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
+
+export function checkRateLimit(identifier: string, config: RateLimitConfig): boolean {
+    const now = Date.now()
+    const record = rateLimitStore.get(identifier)
+
+    if (!record || now > record.resetTime) {
+        rateLimitStore.set(identifier, { count: 1, resetTime: now + config.windowMs })
+        return true
+    }
+
+    if (record.count >= config.maxRequests) {
+        return false
+    }
+
+    record.count++
+    return true
+}
+
+export const defaultRateLimit: RateLimitConfig = {
+    windowMs: 60 * 1000,
+    maxRequests: 60,
+}
+
+export const strictRateLimit: RateLimitConfig = {
+    windowMs: 60 * 1000,
+    maxRequests: 30,
 }

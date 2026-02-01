@@ -1,37 +1,19 @@
-// Firestore database service
-import {
-    collection,
-    doc,
-    addDoc,
-    getDoc,
-    getDocs,
-    updateDoc,
-    deleteDoc,
-    query,
-    where,
-    orderBy,
-    Timestamp,
-    type DocumentData,
-} from "firebase/firestore"
-import { db } from "./firebase"
+// Lightweight local-storage backed shim for firestore functions used by the app.
+// This file is a development-time stub so the dev server can run without a
+// Firebase backend. Replace with the real implementation when integrating
+// with Firestore.
 
-// Types
-export interface Gap {
+export type Gap = {
     id: string
     problem: string
-    type: "data" | "compute" | "evaluation" | "theory" | "deployment" | "methodology"
+    type: string
     confidence: number
-    impactScore?: "low" | "medium" | "high"
-    difficulty?: "low" | "medium" | "high"
-    // Meta Research Fields
-    assumptions?: string[]
-    failures?: string[]
-    datasetGaps?: string[]
-    evaluationCritique?: string
+    impactScore?: string
+    difficulty?: string
 }
 
-export interface CrawlResult {
-    id?: string
+export type CrawlResult = {
+    id: string
     userId: string
     url: string
     title: string
@@ -39,134 +21,131 @@ export interface CrawlResult {
     year?: string
     content: string
     gaps: Gap[]
-    createdAt: Timestamp
+    createdAt?: string
 }
 
-export interface Collection {
+export type Collection = {
     id?: string
     userId: string
     name: string
-    description: string
+    description?: string
     gapCount: number
     paperCount: number
     starred: boolean
-    createdAt: Timestamp
     color: string
     gapIds: string[]
+    createdAt?: string | any
 }
 
-// Collections reference
-const CRAWL_RESULTS = "crawlResults"
-const COLLECTIONS = "collections"
+const keyForCrawl = (userId: string) => `gapminer:crawl:${userId}`
+const keyForCollections = (userId: string) => `gapminer:collections:${userId}`
 
-// Crawl Results CRUD
-export async function saveCrawlResult(result: Omit<CrawlResult, "id" | "createdAt">): Promise<string> {
-    const docRef = await addDoc(collection(db, CRAWL_RESULTS), {
-        ...result,
-        createdAt: Timestamp.now(),
-    })
-    return docRef.id
-}
-
-export async function getCrawlResults(userId: string): Promise<CrawlResult[]> {
-    const q = query(
-        collection(db, CRAWL_RESULTS),
-        where("userId", "==", userId),
-        orderBy("createdAt", "desc")
-    )
-    const snapshot = await getDocs(q)
-    return snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-    })) as CrawlResult[]
-}
-
-export async function getCrawlResult(id: string): Promise<CrawlResult | null> {
-    const docRef = doc(db, CRAWL_RESULTS, id)
-    const snapshot = await getDoc(docRef)
-    if (!snapshot.exists()) return null
-    return { id: snapshot.id, ...snapshot.data() } as CrawlResult
-}
-
-export async function deleteCrawlResult(id: string): Promise<void> {
-    await deleteDoc(doc(db, CRAWL_RESULTS, id))
-}
-
-// Collections CRUD
-export async function saveCollection(
-    collectionData: Omit<Collection, "id" | "createdAt">
-): Promise<string> {
-    const docRef = await addDoc(collection(db, COLLECTIONS), {
-        ...collectionData,
-        createdAt: Timestamp.now(),
-    })
-    return docRef.id
-}
-
-export async function getCollections(userId: string): Promise<Collection[]> {
-    const q = query(
-        collection(db, COLLECTIONS),
-        where("userId", "==", userId),
-        orderBy("createdAt", "desc")
-    )
-    const snapshot = await getDocs(q)
-    return snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-    })) as Collection[]
-}
-
-export async function updateCollection(
-    id: string,
-    data: Partial<DocumentData>
-): Promise<void> {
-    await updateDoc(doc(db, COLLECTIONS, id), data)
-}
-
-export async function deleteCollection(id: string): Promise<void> {
-    await deleteDoc(doc(db, COLLECTIONS, id))
-}
-
-export async function toggleCollectionStar(id: string, starred: boolean): Promise<void> {
-    await updateDoc(doc(db, COLLECTIONS, id), { starred })
-}
-
-// Statistics
-export async function getUserStats(userId: string): Promise<UserStats> {
-    const [crawlResults, collections] = await Promise.all([
-        getCrawlResults(userId),
-        getCollections(userId),
-    ])
-
-    const totalGaps = crawlResults.reduce((acc, r) => acc + r.gaps.length, 0)
-
-    // Calculate type counts
-    const typeCounts = crawlResults.flatMap(r => r.gaps).reduce((acc: any, gap) => {
-        acc[gap.type] = (acc[gap.type] || 0) + 1
-        return acc
-    }, {
-        data: 0,
-        compute: 0,
-        evaluation: 0,
-        methodology: 0
-    })
-
-    return {
-        totalPapers: crawlResults.length,
-        totalGaps,
-        totalCollections: collections.length,
-        typeCounts
+function readJson<T>(key: string): T | null {
+    try {
+        const s = localStorage.getItem(key)
+        return s ? (JSON.parse(s) as T) : null
+    } catch (e) {
+        console.error("Failed to read localStorage key", key, e)
+        return null
     }
 }
 
-export interface UserStats {
-    totalPapers: number
-    totalGaps: number
-    totalCollections: number
-    typeCounts: {
-        data: number
-        compute: number
-        evaluation: number
-        methodology: number
+function writeJson(key: string, data: any) {
+    try {
+        localStorage.setItem(key, JSON.stringify(data))
+    } catch (e) {
+        console.error("Failed to write localStorage key", key, e)
+    }
+}
+
+function makeId(prefix = "id") {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`
+}
+
+export async function getCrawlResults(userId: string): Promise<CrawlResult[]> {
+    if (!userId) return []
+    const key = keyForCrawl(userId)
+    const data = readJson<CrawlResult[]>(key)
+    return data ?? []
+}
+
+export async function saveCrawlResult(payload: {
+    userId: string
+    url: string
+    title?: string
+    venue?: string
+    year?: string
+    content: string
+    gaps: Gap[]
+}): Promise<string> {
+    const key = keyForCrawl(payload.userId)
+    const existing = readJson<CrawlResult[]>(key) ?? []
+    const id = makeId('cr')
+    const item: CrawlResult = {
+        id,
+        userId: payload.userId,
+        url: payload.url,
+        title: payload.title || payload.url,
+        venue: payload.venue,
+        year: payload.year,
+        content: payload.content || "",
+        gaps: payload.gaps || [],
+        createdAt: new Date().toISOString()
+    }
+    existing.unshift(item)
+    writeJson(key, existing)
+    return id
+}
+
+export async function getCollections(userId: string): Promise<Collection[]> {
+    if (!userId) return []
+    const key = keyForCollections(userId)
+    const data = readJson<Collection[]>(key)
+    return data ?? []
+}
+
+export async function saveCollection(payload: Collection): Promise<string> {
+    const key = keyForCollections(payload.userId)
+    const existing = readJson<Collection[]>(key) ?? []
+    const id = makeId('col')
+    const item: Collection = {
+        ...payload,
+        id,
+        createdAt: new Date().toISOString()
+    }
+    existing.unshift(item)
+    writeJson(key, existing)
+    return id
+}
+
+export async function toggleCollectionStar(collectionId: string, starred: boolean): Promise<void> {
+    // Find the collection across all users (development shim stores per-user, but
+    // callers typically provide the id and operate in the user's scope). We'll
+    // attempt to update any collection with matching id.
+    try {
+        const prefix = 'gapminer:collections:'
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (!key || !key.startsWith(prefix)) continue
+            const arr = readJson<Collection[]>(key) ?? []
+            const idx = arr.findIndex(c => c.id === collectionId)
+            if (idx >= 0) {
+                arr[idx] = { ...arr[idx], starred }
+                writeJson(key, arr)
+                return
+            }
+        }
+    } catch (e) {
+        console.error('toggleCollectionStar error', e)
+    }
+}
+
+// Export a small helper to clear data during development (not used by app).
+export function _dev_clearUserData(userId: string) {
+    try {
+        localStorage.removeItem(keyForCrawl(userId))
+        localStorage.removeItem(keyForCollections(userId))
+    } catch (e) {
+        console.error('clearUserData', e)
     }
 }

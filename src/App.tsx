@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react"
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
-import { Layout } from "@/components/layout"
+import { ModernLayout } from "@/components/layout/ModernLayout"
 import { AuthProvider } from "@/context/AuthContext"
 import { SubscriptionProvider } from "@/context/SubscriptionContext"
 import { TeamProvider } from "@/context/TeamContext"
@@ -11,14 +11,11 @@ import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { FloatingAssistant } from "@/components/FloatingAssistant"
 import { PageLoader } from "@/components/ui/LoadingSpinner"
 
-
-// Helper function for retrying lazy imports
 const lazyWithRetry = (componentImport: () => Promise<any>) =>
   lazy(async () => {
     const pageHasAlreadyBeenForceRefreshed = JSON.parse(
       window.localStorage.getItem('page-has-been-force-refreshed') || 'false'
     );
-
     try {
       const component = await componentImport();
       window.localStorage.setItem('page-has-been-force-refreshed', 'false');
@@ -32,20 +29,25 @@ const lazyWithRetry = (componentImport: () => Promise<any>) =>
     }
   });
 
-// Lazy load pages
-const HomePage = lazyWithRetry(() => import("@/pages/HomePage").then(module => ({ default: module.HomePage })))
-const DashboardPage = lazyWithRetry(() => import("@/pages/DashboardPage").then(module => ({ default: module.DashboardPage })))
-const CrawlPage = lazyWithRetry(() => import("@/pages/CrawlPage").then(module => ({ default: module.CrawlPage })))
-const ExplorePage = lazyWithRetry(() => import("@/pages/ExplorePage").then(module => ({ default: module.ExplorePage })))
-const InsightsPage = lazyWithRetry(() => import("@/pages/InsightsPage").then(module => ({ default: module.InsightsPage })))
-const ComparisonPage = lazyWithRetry(() => import("@/pages/ComparisonPage").then(module => ({ default: module.ComparisonPage })))
-const KnowledgeMapPage = lazyWithRetry(() => import("@/pages/KnowledgeMapPage").then(module => ({ default: module.KnowledgeMapPage })))
-const AssistantPage = lazyWithRetry(() => import("@/pages/AssistantPage").then(module => ({ default: module.AssistantPage })))
-const CollectionsPage = lazyWithRetry(() => import("@/pages/CollectionsPage").then(module => ({ default: module.CollectionsPage })))
-const AdminPage = lazyWithRetry(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
-const TeamSettingsPage = lazyWithRetry(() => import("@/pages/TeamSettingsPage").then(module => ({ default: module.TeamSettingsPage })))
+const DashboardPage = lazyWithRetry(() => import("@/pages/DashboardPage").then(m => ({ default: m.default })))
+const PapersPage = lazyWithRetry(() => import("@/pages/PapersPage").then(m => ({ default: m.default })))
+const GapsPage = lazyWithRetry(() => import("@/pages/GapsPage").then(m => ({ default: m.default })))
+const KnowledgeGraphPage = lazyWithRetry(() => import("@/pages/KnowledgeGraphPage").then(m => ({ default: m.default })))
+const WorkflowsPage = lazyWithRetry(() => import("@/pages/WorkflowsPage").then(m => ({ default: m.default })))
+const ChatPage = lazyWithRetry(() => import("@/pages/ChatPage").then(m => ({ default: m.default })))
+const LiteratureReviewPage = lazyWithRetry(() => import("@/pages/LiteratureReviewPage").then(m => ({ default: m.default })))
+const DatasetsPage = lazyWithRetry(() => import("@/pages/DatasetsPage").then(m => ({ default: m.default })))
+const GrantsPage = lazyWithRetry(() => import("@/pages/GrantsPage").then(m => ({ default: m.default })))
+const RoadmapPage = lazyWithRetry(() => import("@/pages/RoadmapPage").then(m => ({ default: m.default })))
+const CompetitorPage = lazyWithRetry(() => import("@/pages/CompetitorPage").then(m => ({ default: m.default })))
+const ImpactPage = lazyWithRetry(() => import("@/pages/ImpactPage").then(m => ({ default: m.default })))
+const TeamPage = lazyWithRetry(() => import("@/pages/TeamPage").then(m => ({ default: m.default })))
+const SettingsPage = lazyWithRetry(() => import("@/pages/SettingsPage").then(m => ({ default: m.default })))
+const AnalyticsPage = lazyWithRetry(() => import("@/pages/AnalyticsPage").then(m => ({ default: m.default })))
+const ExportPage = lazyWithRetry(() => import("@/pages/ExportPage").then(m => ({ default: m.default })))
+const HomePage = lazyWithRetry(() => import("@/pages/HomePage").then(m => ({ default: m.HomePage })))
 
-function App() {
+export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
@@ -57,89 +59,26 @@ function App() {
               <FloatingAssistant />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
-                  <Route element={<Layout />}>
-                    <Route path="/" element={<HomePage />} />
-                    <Route
-                      path="/dashboard"
-                      element={
-                        <ProtectedRoute>
-                          <DashboardPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/crawl"
-                      element={
-                        <ProtectedRoute>
-                          <CrawlPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/explore"
-                      element={
-                        <ProtectedRoute>
-                          <ExplorePage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/insights"
-                      element={
-                        <ProtectedRoute>
-                          <InsightsPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/compare"
-                      element={
-                        <ProtectedRoute>
-                          <ComparisonPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/map"
-                      element={
-                        <ProtectedRoute>
-                          <KnowledgeMapPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/assistant"
-                      element={
-                        <ProtectedRoute>
-                          <AssistantPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/collections"
-                      element={
-                        <ProtectedRoute>
-                          <CollectionsPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/admin"
-                      element={
-                        <ProtectedRoute>
-                          <AdminPage />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/team"
-                      element={
-                        <ProtectedRoute>
-                          <TeamSettingsPage />
-                        </ProtectedRoute>
-                      }
-                    />
+                  <Route path="/" element={<HomePage />} />
+                  <Route element={<ProtectedRoute><ModernLayout /></ProtectedRoute>}>
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/papers" element={<PapersPage />} />
+                    <Route path="/gaps" element={<GapsPage />} />
+                    <Route path="/knowledge-graph" element={<KnowledgeGraphPage />} />
+                    <Route path="/workflows" element={<WorkflowsPage />} />
+                    <Route path="/chat" element={<ChatPage />} />
+                    <Route path="/literature-review" element={<LiteratureReviewPage />} />
+                    <Route path="/datasets" element={<DatasetsPage />} />
+                    <Route path="/grants" element={<GrantsPage />} />
+                    <Route path="/roadmap" element={<RoadmapPage />} />
+                    <Route path="/competitors" element={<CompetitorPage />} />
+                    <Route path="/impact" element={<ImpactPage />} />
+                    <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/export" element={<ExportPage />} />
+                    <Route path="/team" element={<TeamPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
                   </Route>
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </Suspense>
             </TeamProvider>
@@ -149,5 +88,3 @@ function App() {
     </ErrorBoundary>
   )
 }
-
-export default App

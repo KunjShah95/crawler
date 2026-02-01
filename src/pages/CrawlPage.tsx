@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { crawlAndAnalyze, explainUnsolved, comparePapers, generateStartupIdea, generateResearchQuestions } from "@/lib/api"
 import { saveCrawlResult, type Gap } from "@/lib/firestore"
 import { useAuth } from "@/context/AuthContext"
+import PrimeHero from "@/components/layout/PrimeHero"
 
 interface PaperResult {
     url: string
@@ -315,6 +316,7 @@ export function CrawlPage() {
 
     return (
         <div className="min-h-screen py-12">
+            <PrimeHero />
             <div className="container-wide">
                 {/* Header */}
                 <div className="mb-12">

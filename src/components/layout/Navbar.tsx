@@ -50,7 +50,7 @@ export function Navbar() {
     const showPublicNav = isHomePage && !isAuthenticated
 
     const handleSignIn = () => {
-        setAuthModalMode("signin")
+        setAuthModalMode("login")
         setShowAuthModal(true)
         setMobileMenuOpen(false)
     }
@@ -70,7 +70,7 @@ export function Navbar() {
 
     const handleNavClick = (item: typeof appNavItems[0]) => {
         if (!isAuthenticated) {
-            setAuthModalMode("signin")
+            setAuthModalMode("login")
             setShowAuthModal(true)
             setMobileMenuOpen(false)
             return

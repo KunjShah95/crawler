@@ -34,11 +34,22 @@ export function KnowledgeMapPage() {
         load()
     }, [user])
 
+    // deterministic pseudo-random positions based on id to satisfy purity rules
+    const seededPosition = (id: string, min: number, max: number) => {
+        let h = 0
+        for (let i = 0; i < id.length; i++) {
+            h = (h << 5) - h + id.charCodeAt(i)
+            h |= 0
+        }
+        const ratio = (Math.abs(h) % 1000) / 1000
+        return min + Math.floor(ratio * (max - min))
+    }
+
     const nodes = useMemo(() => {
         return gaps.map((gap) => ({
             ...gap,
-            x: 100 + Math.random() * 800,
-            y: 100 + Math.random() * 500,
+            x: seededPosition(gap.id ?? gap.paper ?? 'node', 100, 900),
+            y: seededPosition((gap.id ?? gap.paper ?? 'node') + '_y', 100, 600),
         }))
     }, [gaps])
 
